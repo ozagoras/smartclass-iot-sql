@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SmartClass IoT Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="dashboard">
+    <!-- Header -->
+    <header class="header">
+      <h1>🏫 SmartClass IoT Dashboard</h1>
+      <p id="refresh-status">Last update: never</p>
+    </header>
+
+    <!-- Cards container -->
+    <section id="cards" class="cards-grid">
+      <p class="loading">Loading classrooms...</p>
+    </section>
+
+    <!-- Chart area -->
+    <section class="chart-container">
+      <div class="chart-header">
+        <h2 id="chart-title">📈 Class History</h2>
+        <select id="classSelect"></select>
+      </div>
+      <canvas id="historyChart"></canvas>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <p>© 2025 SmartClass IoT</p>
+    </footer>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

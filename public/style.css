@@ -1,0 +1,285 @@
+/* =============== GLOBAL =============== */
+body {
+  margin: 0;
+  font-family: "Inter", "Segoe UI", sans-serif;
+  background: #eef1f7;
+  color: #333;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 25px;
+  box-sizing: border-box;
+}
+
+/* =============== HEADER =============== */
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #1f2b46;
+}
+
+#refresh-status {
+  font-size: 0.9rem;
+  color: #777;
+  margin-top: 5px;
+}
+
+/* =============== CARDS GRID =============== */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 25px;
+  width: 100%;
+}
+
+.sensor-card {
+  background: linear-gradient(145deg, #ffffff, #e6e9ef);
+  border-radius: 16px;
+  box-shadow: 5px 5px 15px #d1d5de, -5px -5px 15px #ffffff;
+  padding: 25px;
+  text-align: center;
+  transition: all 0.25s ease;
+}
+
+.sensor-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 7px 7px 18px #d1d5de, -7px -7px 18px #ffffff;
+}
+
+.room-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  text-align: center;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #9ca3af;
+  transition: background 0.3s;
+}
+
+.status-dot.online {
+  background: #22c55e;
+}
+
+.status-dot.closed {
+  background: #dc2626;
+}
+
+.sensor-card h3 {
+  font-size: 1.1rem;
+  margin: 0;
+  color: #1f2b46;
+}
+
+.temp-value {
+  font-size: 2.8rem;
+  font-weight: 600;
+  color: #111;
+  margin: 12px 0;
+}
+
+.details {
+  font-size: 0.95rem;
+  color: #555;
+}
+
+.sensor-card.closed {
+  opacity: 0.7;
+  filter: grayscale(40%);
+  background: #f8f9fb;
+  border: 1px solid #e3e4e8;
+}
+
+.closed-tag {
+  background: #dc2626;
+  color: white;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border-radius: 8px;
+  margin-left: 8px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.sensor-card.closed .temp-value {
+  color: #9ca3af;
+}
+
+/* =============== CHART SECTION =============== */
+.chart-container {
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  padding: 30px;
+  margin-top: 40px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chart-header h2 {
+  font-size: 1.2rem;
+  color: #1f2b46;
+  margin: 0;
+}
+
+#classSelect {
+  background: #1f2b46;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  outline: none;
+  transition: 0.2s;
+}
+
+#classSelect:hover {
+  background: #314268;
+}
+
+/* =============== FOOTER =============== */
+footer {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #777;
+  margin-top: 50px;
+  padding-bottom: 15px;
+}
+
+/* =============== RESPONSIVE DESIGN =============== */
+@media (max-width: 1024px) {
+  .dashboard {
+    padding: 15px;
+  }
+
+  .temp-value {
+    font-size: 2.4rem;
+  }
+
+  .chart-container {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .header h1 {
+    font-size: 1.6rem;
+  }
+
+  .cards-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .sensor-card {
+    width: 100%;
+    padding: 20px;
+    font-size: 0.9rem;
+  }
+
+  .temp-value {
+    font-size: 2rem;
+  }
+
+  .chart-container {
+    padding: 15px;
+  }
+
+  canvas {
+    height: 280px !important;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #classSelect {
+    width: 100%;
+    text-align: center;
+  }
+
+  footer {
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header h1 {
+    font-size: 1.3rem;
+  }
+
+  .temp-value {
+    font-size: 1.8rem;
+  }
+
+  .details {
+    font-size: 0.85rem;
+  }
+
+  canvas {
+    height: 250px !important;
+  }
+}
+.icon,
+.fa-temperature-three-quarters,
+.fa-droplet {
+  color: #1f2b46;
+  margin-right: 6px;
+  font-size: 1.1em;
+  vertical-align: middle;
+}
+
+.details p {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.temp-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.temp-value i {
+  color: #ff5722;
+  font-size: 1.4em;
+}
+.chart-container {
+  height: 420px;
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .chart-container {
+    height: 300px;
+  }
+}
