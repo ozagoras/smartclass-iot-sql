@@ -96,6 +96,7 @@ app.post('/api/data', (req, res) => {
   }
   const now = Date.now();
   const time = new Date(now);
+  
   const sql = 'INSERT INTO sensor_data (class_name, temperature, humidity, timestamp) VALUES (?, ?, ?, ?)';
   db.query({sql:sql,timeout:7000}, [class_name, temperature, humidity, time], err => {
     if (err) {
