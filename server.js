@@ -1,200 +1,301 @@
-const express = require('express');
-const mysql = require('mysql2');
-const bodyParser = require('body-parser');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const fs = require('fs');
-const http = require('http');
-const cron = require('node-cron');
-const { Server } = require('socket.io');
+/******************************************************************
+ * SmartClass Server — CLEAN, STABLE, NON-BLOCKING VERSION
+ ******************************************************************/
 
+const express = require("express");
+const mysql = require("mysql2");
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const fs = require("fs");
+const http = require("http");
+const cron = require("node-cron");
+const { Server } = require("socket.io");
 
-dotenv.config({ path: './mysql_config.env' });
+dotenv.config({ path: "./mysql_config.env" });
+let globalFlowEnabled = false;
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.json());
+
+app.use(express.static("public"));
+
 const server = http.createServer(app);
 const io = new Server(server);
+// 🔔 ALARMS PER CLASS
+let classAlarms = {}; 
+// format:
+// classAlarms["ClassA"] = { active: true, message: "CO2 high" }
 
-// 🧩 MySQL Connection
+/******************************************************************
+ * Load SSL CA ONCE (instead of inside every reconnection)
+ ******************************************************************/
+let sslCA;
+try {
+  sslCA = fs.readFileSync("./ca.pem");
+  console.log("🔐 SSL CA loaded once");
+} catch (e) {
+  console.error("❌ Could not load ca.pem:", e);
+  process.exit(1);
+}
+
+/******************************************************************
+ * MySQL STABLE RECONNECT LOGIC (no recursive storms)
+ ******************************************************************/
 let db;
+let reconnecting = false;
 
 function handleDbConnection() {
+  if (reconnecting) return; // prevents multiple reconnect loops
+  reconnecting = true;
+
+  console.log("🔌 Connecting to Aiven MySQL...");
+
   db = mysql.createConnection({
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
-    ssl: { ca: fs.readFileSync('./ca.pem') },
-    connectTimeout: 10000  // 10s connection timeout
+    ssl: { ca: sslCA },
+    connectTimeout: 8000,
   });
 
-  db.connect(err => {
+  db.connect((err) => {
+    reconnecting = false;
+
     if (err) {
-      console.error('❌ Error connecting to MySQL:', err);
-      setTimeout(handleDbConnection, 5000); // retry after 5s
-    } else {
-      console.log('✅ Connected to Aiven MySQL');
+      console.error("❌ MySQL connection error:", err.code);
+      setTimeout(handleDbConnection, 5000);
+      return;
+    }
+
+    console.log("✅ Connected to Aiven MySQL");
+
+    // Create table once after successful connection
+    db.query(
+      `
+      CREATE TABLE IF NOT EXISTS sensor_data (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        class_name VARCHAR(50) NOT NULL,
+        temperature FLOAT,
+        humidity FLOAT,
+        co2 FLOAT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `
+    );
+  });
+
+  db.on("error", (err) => {
+    console.error("⚠️ MySQL error:", err.code);
+
+    if (err.fatal || err.code === "PROTOCOL_CONNECTION_LOST") {
+      console.log("🔄 Reconnecting to MySQL...");
+      handleDbConnection();
     }
   });
-
-  db.on('error', err => {
-  console.error('⚠️ MySQL error:', err);
-  if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.fatal) {
-    console.log('🔄 Reconnecting to MySQL...');
-    handleDbConnection();
-  } else {
-    throw err;
-  }
-});
-
- // 🧱 Ensure table exists
-  db.query(`
-  CREATE TABLE IF NOT EXISTS sensor_data (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    class_name VARCHAR(50) NOT NULL,
-    temperature FLOAT,
-    humidity FLOAT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
 }
-
 
 handleDbConnection();
 
-
-
-
-
-// 🧹 Retention cleanup every 15 minutes
-cron.schedule('*/15 * * * *', async () => {
+/******************************************************************
+ * CRON JOB — Retention Cleanup (Runs every 15 minutes)
+ ******************************************************************/
+cron.schedule("*/15 * * * *", async () => {
   try {
     const [result] = await db.promise().query(
-      'DELETE FROM sensor_data WHERE timestamp < NOW() - INTERVAL 6 HOUR'
+      "DELETE FROM sensor_data WHERE timestamp < NOW() - INTERVAL 6 HOUR"
     );
-    console.log(`🧹 Deleted ${result.affectedRows} old rows`);
+
+    console.log(`🧹 Cleanup: removed ${result.affectedRows} old rows`);
   } catch (err) {
-    console.error('❌ Cleanup failed:', err);
+    console.error("❌ Cron cleanup failed:", err.code);
   }
 });
 
+/******************************************************************
+ * POST /api/data — ESP32 sends sensor readings
+ ******************************************************************/
+app.post("/api/data", (req, res) => {
+  let { class_name, temperature, humidity , co2 } = req.body;
 
-// 📡 ESP32 → POST data
-app.post('/api/data', (req, res) => {
-  let { class_name, temperature, humidity } = req.body;
-  if (!class_name || temperature == null || humidity == null) {
-    return res.status(400).send('Missing fields');
+  if (!class_name || temperature == null || humidity == null || co2 == null) {
+    return res.status(400).send("Missing fields");
   }
-  if(class_name !== 1){
-    class_name = "ClassB";
-  } else {
-    class_name = "ClassA";
-  }
-  const now = Date.now();
-  const time = new Date(now);
-  
-  const sql = 'INSERT INTO sensor_data (class_name, temperature, humidity, timestamp) VALUES (?, ?, ?, ?)';
-  db.query({sql:sql,timeout:7000}, [class_name, temperature, humidity, time], err => {
+
+  class_name = class_name === 1 ? "ClassA" : "ClassB";
+
+  const timestamp = new Date();
+
+  const sql =
+    "INSERT INTO sensor_data (class_name, temperature, humidity, co2, timestamp) VALUES (?, ?, ?, ?, ?)";
+
+  db.query({ sql, timeout: 3000 }, [class_name, temperature, humidity, co2, timestamp], (err) => {
     if (err) {
-      db.destroy();
-      handleDbConnection();
-      res.send('OK');
-    } else {
-      console.log(`📡 ${class_name}: ${temperature}°C, ${humidity}%`);
-      io.emit('newData'); 
-      res.send('OK');
+      console.error("❌ Insert error:", err.code);
+      handleDbConnection(); // no destroy, safe reconnect
+      return res.send("OK");
     }
+
+    console.log(`📡 ${class_name}: ${temperature}°C, ${humidity}%, ${co2} ppm`);
+    io.emit("newData",class_name);
+    res.send("OK");
   });
 });
 
-// 🟢 Latest data per class (for dashboard)
-app.get('/api/getdata', (req, res) => {
+// ESP32 → send an alarm for a specific class
+app.post("/api/alarm", (req, res) => {
+  const { room, message } = req.body;
+
+  if (!room || !message) {
+    return res.status(400).json({ error: "Missing room or message" });
+  }
+
+  classAlarms[room] = {
+    active: true,
+    message,
+    timestamp: new Date()
+  };
+
+  console.log("🚨 ALARM:", room, message);
+
+  // Notify only the dashboard, not all classes
+  io.emit("alarm", { room, message });
+
+  res.json({ status: "OK" });
+});
+
+// Dashboard → fetch alarm for a specific class
+app.get("/api/alarm", (req, res) => {
+  const room = req.query.room;
+  res.json(classAlarms[room] || { active: false });
+});
+
+/******************************************************************
+ * GET /api/getdata — Latest reading per class
+ ******************************************************************/
+app.get("/api/getdata", (req, res) => {
   const sql = `
-    SELECT s1.class_name, s1.temperature, s1.humidity, s1.timestamp
+    SELECT s1.class_name, s1.temperature, s1.humidity, s1.timestamp, s1.co2
     FROM sensor_data s1
     INNER JOIN (
-      SELECT class_name, MAX(timestamp) AS latest
-      FROM sensor_data
-      GROUP BY class_name
-    ) s2
-    ON s1.class_name = s2.class_name AND s1.timestamp = s2.latest
-    ORDER BY s1.class_name ASC
+        SELECT class_name, MAX(timestamp) AS latest
+        FROM sensor_data
+        GROUP BY class_name
+    ) s2 ON s1.class_name = s2.class_name AND s1.timestamp = s2.latest
+    ORDER BY s1.class_name
   `;
 
-  db.query({sql:sql,timeout:7000}, (err, results) => {
+  db.query({ sql, timeout: 3000 }, (err, results) => {
     if (err) {
-      console.error('⏰ Query timeout — reconnecting...');
-      db.destroy();
+      console.error("❌ Query error:", err.code);
       handleDbConnection();
-      res.send('OK');
-    } else {
-      const now = Date.now();
-      const data = results.map(r => {
-        const lastUpdate = new Date(r.timestamp).getTime();
-        const diffMinutes = (now - lastUpdate) / 1000 / 60;
-        const closed = diffMinutes >= 5; // 💡 mark offline if >5 min since last update
+      return res.send("OK");
+    }
 
+    const now = Date.now();
+
+    const data = results.map((r) => {
+      const diffMinutes = (now - new Date(r.timestamp).getTime()) / 60000;
       return {
         room: r.class_name,
         temp: r.temperature,
         hum: r.humidity,
         feels: calculateFeelsLike(r.temperature, r.humidity),
         timestamp: r.timestamp,
-        closed: closed
+        closed: diffMinutes >= 5,
       };
     });
 
     res.json(data);
-    }
-  }); 
-});
-
-
-// 📈 History data (for graphs)
-app.get('/api/history', (req, res) => {
-  const { class_name } = req.query;
-  const sql = `
-    SELECT temperature, humidity, timestamp
-    FROM sensor_data
-    WHERE class_name = ?
-    ORDER BY timestamp ASC
-  `;
-  db.query({sql:sql,timeout:7000}, [class_name || 'ClassA'], (err, results) => {
-    if (err) {
-      console.error('⏰ Query timeout — reconnecting...');
-      db.destroy();
-      handleDbConnection();
-      res.send('OK');
-    } else {
-      res.json(results);
-    }
   });
 });
 
+// ===============================
+// GLOBAL FLOW CONTROL
+// ===============================
+app.post("/api/flow", async (req, res) => {
+  console.log("RAW BODY:", req.body);
+
+  const { enabled } = req.body;
+
+  globalFlowEnabled = enabled;
+  console.log("🌐 Global flow now 2:", globalFlowEnabled);
+  res.json({ ok: true, globalFlowEnabled });
+  // Forward command to ESP32
+  // try {
+  //   const espUrl = "http://ESP32-IP-HERE/control";   // <--- CHANGE THIS
+  //   await fetch(espUrl, {
+  //     method: "POST",
+  //     headers: { "Content-Type": "application/json" },
+  //     body: JSON.stringify({ enable })
+  //   });
+
+  //   res.json({ ok: true, globalFlowEnabled });
+  // } catch (err) {
+  //   console.error("❌ Failed to send command to ESP32:", err);
+  //   res.json({ ok: false, error: "ESP32 unreachable" });
+  // }
+});
+
+/******************************************************************
+ * GET /api/history — Full history for charts
+ ******************************************************************/
+app.get("/api/history", (req, res) => {
+  const { class_name } = req.query;
+
+  db.query(
+    {
+      sql: "SELECT temperature, humidity, co2, timestamp FROM sensor_data WHERE class_name = ? ORDER BY timestamp",
+      timeout: 3000,
+    },
+    [class_name || "ClassA"],
+    (err, results) => {
+      if (err) {
+        console.error("❌ History query error:", err.code);
+        handleDbConnection();
+        return res.send("OK");
+      }
+
+      res.json(results);
+    }
+  );
+});
+
+/******************************************************************
+ * Feels Like Formula
+ ******************************************************************/
 function calculateFeelsLike(tempC, humidity) {
   const T = tempC;
   const R = humidity;
-  const feelsLikeC =
+
+  return (
     -8.784695 +
     1.61139411 * T +
-    2.338549 * R +
-    -0.14611605 * T * R +
-    -0.01230809 * T * T +
-    -0.01642482 * R * R +
+    2.338549 * R -
+    0.14611605 * T * R -
+    0.01230809 * T * T -
+    0.01642482 * R * R +
     0.00221173 * T * T * R +
-    0.00072546 * T * R * R +
-    -0.00000358 * T * T * R * R;
-
-  return feelsLikeC;
+    0.00072546 * T * R * R -
+    0.00000358 * T * T * R * R
+  );
 }
 
-io.on('connection', socket => {
-  console.log('🟢 Dashboard connected');
+/******************************************************************
+ * SOCKET.IO
+ ******************************************************************/
+io.on("connection", () => {
+  console.log("🟢 Dashboard connected");
 });
 
+/******************************************************************
+ * START SERVER
+ ******************************************************************/
 const PORT = 3000;
-server.listen(PORT, "0.0.0.0",( ) => console.log(`🚀 SmartClass server running on http://localhost:${PORT}`));
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`🚀 SmartClass Server running on port ${PORT}`)
+);

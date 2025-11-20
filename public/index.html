@@ -1,43 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SmartClass IoT Dashboard</title>
+  <title>SmartClass Dashboard</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-  <div class="dashboard">
-    <!-- Header -->
-    <header class="header">
-      <h1>🏫 SmartClass IoT Dashboard</h1>
-      <p id="refresh-status">Last update: never</p>
-    </header>
-
-    <!-- Cards container -->
-    <section id="cards" class="cards-grid">
-      <p class="loading">Loading classrooms...</p>
-    </section>
-
-    <!-- Chart area -->
-    <section class="chart-container">
-      <div class="chart-header">
-        <h2 id="chart-title">📈 Class History</h2>
-        <select id="classSelect"></select>
-      </div>
-      <canvas id="historyChart"></canvas>
-    </section>
-
-    <!-- Footer -->
-    <footer>
-      <p>© 2025 SmartClass IoT</p>
-    </footer>
-  </div>
   <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+
+  <header>
+    <h1>SmartClass Dashboard</h1>
+    <p id="refresh-status">Last update: --:--:--</p>
+  </header>
+
+  <!-- =======================
+       GLOBAL FLOW CONTROL
+       ======================= -->
+  <div class="flow-center">
+    <button id="flow-toggle-btn" onclick="toggleAllFlow()">Enable Flow</button>
+  </div>
+
+  <!-- 🔔 ALARM BANNER (TOP RIGHT) -->
+  <div id="class-alarm" class="alarm-hidden"></div>
+
+  <!-- CLASS CARDS -->
+  <section id="cards"></section>
+
+  <!-- THREE CHART GRID -->
+  <section class="chart-grid">
+
+    <div class="chart-card">
+      <h3 class="chart-title">🌡 Temperature</h3>
+      <canvas id="tempChart"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3 class="chart-title">💧 Humidity</h3>
+      <canvas id="humChart"></canvas>
+    </div>
+
+    <div class="chart-card">
+      <h3 class="chart-title">🟢 CO₂</h3>
+      <canvas id="co2Chart"></canvas>
+    </div>
+
+  </section>
+
+  <footer> SmartClass IoT @2025 </footer>
+
   <script src="dashboard.js"></script>
 </body>
+
 </html>
