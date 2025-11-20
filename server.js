@@ -218,27 +218,17 @@ app.get("/api/getdata", (req, res) => {
 // GLOBAL FLOW CONTROL
 // ===============================
 app.post("/api/flow", async (req, res) => {
-  console.log("RAW BODY:", req.body);
 
   const { enabled } = req.body;
 
   globalFlowEnabled = enabled;
-  console.log("🌐 Global flow now 2:", globalFlowEnabled);
+  console.log("🌐 Global flow now :", globalFlowEnabled);
   res.json({ ok: true, globalFlowEnabled });
-  // Forward command to ESP32
-  // try {
-  //   const espUrl = "http://ESP32-IP-HERE/control";   // <--- CHANGE THIS
-  //   await fetch(espUrl, {
-  //     method: "POST",
-  //     headers: { "Content-Type": "application/json" },
-  //     body: JSON.stringify({ enable })
-  //   });
 
-  //   res.json({ ok: true, globalFlowEnabled });
-  // } catch (err) {
-  //   console.error("❌ Failed to send command to ESP32:", err);
-  //   res.json({ ok: false, error: "ESP32 unreachable" });
-  // }
+});
+// DASHBOARD → ESP32 reads this
+app.get("/api/flow", (req, res) => {
+  res.json({ enable: globalFlowEnabled });
 });
 
 /******************************************************************
