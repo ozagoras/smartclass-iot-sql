@@ -218,10 +218,10 @@ app.get("/api/getdata", (req, res) => {
 // GLOBAL FLOW CONTROL
 // ===============================
 app.post("/api/flow", async (req, res) => {
+  console.log("Global flow control " + JSON.stringify(req.body));
+  const { enable } = req.body;
 
-  const { enabled } = req.body;
-
-  globalFlowEnabled = enabled;
+  globalFlowEnabled = enable;
   console.log("🌐 Global flow now :", globalFlowEnabled);
   res.json({ ok: true, globalFlowEnabled });
 

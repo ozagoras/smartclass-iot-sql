@@ -1,5 +1,5 @@
 /* ==========================================================
-   SMARTCLASS DASHBOARD — FINAL VERSION (FLOW TOGGLE + CARD SELECT)
+   SMARTCLASS DASHBOARD — VERSION C (GLOBAL FLOW + CARD SELECT)
    ========================================================== */
 
 let tempChart = null;
@@ -8,13 +8,12 @@ let co2Chart = null;
 
 let currentClass = null;
 let userSelected = false;
-
-let flowEnabled = false; // global flag
+let flowEnabled = true;  // start enabled visibly
 
 const socket = io();
 
 /* ==========================================================
-   WEBSOCKET — RECEIVE DATA IN REALTIME
+   REALTIME WEBSOCKET — NEW DATA
    ========================================================== */
 socket.on("newData", async (roomName) => {
   console.log("📡 Incoming data from:", roomName);
@@ -22,11 +21,9 @@ socket.on("newData", async (roomName) => {
   const res = await fetch("/api/getdata");
   const sensors = await res.json();
 
+  // If ALL were closed, auto switch to the room that sent data
   const allClosed = sensors.every(s => s.closed);
-
-  // Auto switch ONLY if all were closed
   if (allClosed) {
-    console.log("🟢 Auto-switch →", roomName);
     currentClass = roomName;
     userSelected = false;
   }
@@ -35,7 +32,7 @@ socket.on("newData", async (roomName) => {
 });
 
 /* ==========================================================
-   WEBSOCKET — ALARM
+   REALTIME WEBSOCKET — ALARM
    ========================================================== */
 socket.on("alarm", (alarm) => {
   if (alarm.room === currentClass) {
@@ -43,107 +40,49 @@ socket.on("alarm", (alarm) => {
   }
 });
 
-async function toggleAllFlow() {
-  const btn = document.getElementById("flow-toggle-btn");
-
-  // Toggle
-  flowEnabled = !flowEnabled;
-
-  console.log("Sending enable =", flowEnabled);
-
-  // Send EXACT field name expected by server
-  await fetch("/api/flow", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ enable: flowEnabled })   // <-- FIXED
-  });
-
-  // Button UI
-  if (flowEnabled) {
-    btn.textContent = "Disable Flow";
-    btn.classList.add("on");
-    btn.classList.remove("off");
-  } else {
-    btn.textContent = "Enable Flow";
-    btn.classList.add("off");
-    btn.classList.remove("on");
-  }
-}
-
-
-
-
-/* ==========================================================
-   ALARM LOAD / DISPLAY
-   ========================================================== */
-async function loadClassAlarm(room) {
-  const res = await fetch(`/api/alarm?room=${room}`);
-  const alarm = await res.json();
-  showAlarm(alarm);
-}
-
-function showAlarm(alarm) {
-  const box = document.getElementById("class-alarm");
-  if (!box) return;
-
-  if (alarm.active) {
-    box.textContent = `🚨 ${alarm.message}`;
-    box.classList.remove("alarm-hidden");
-    box.classList.add("alarm-visible");
-  } else {
-    box.classList.add("alarm-hidden");
-    box.classList.remove("alarm-visible");
-  }
-}
-
 /* ==========================================================
    GLOBAL FLOW BUTTON
    ========================================================== */
-
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("flow-toggle-btn");
 
-  // Always start visually as ENABLED (green)
-  btn.classList.add("on");
-  btn.textContent = "Disable Flow"; 
-  flowEnabled = true;  
+  // --- INITIAL STATE ---
+  flowEnabled = false;             // Flow is OFF initially
+  btn.textContent = "Enable Flow"; // Show "Enable Flow"
+  btn.classList.add("on");         // GREEN (because enable = available)
 
   btn.addEventListener("click", async () => {
-
-    // Toggle state
     flowEnabled = !flowEnabled;
 
     console.log("🌐 Sending global flow status:", flowEnabled);
 
-    // Send correct field name to server  (THIS FIXES UNDEFINED)
     await fetch("/api/flow", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enable: flowEnabled })
+      body: JSON.stringify({ enabled: flowEnabled })
     });
 
-    // Update button appearance
+    // --- UPDATE BUTTON UI ---
     if (flowEnabled) {
+      // FLOW IS ON → show "Disable Flow" (red)
       btn.textContent = "Disable Flow";
-      btn.classList.remove("off");
-      btn.classList.add("on");  // green
-    } else {
-      btn.textContent = "Enable Flow";
       btn.classList.remove("on");
-      btn.classList.add("off"); // red
+      btn.classList.add("off");
+    } else {
+      // FLOW IS OFF → show "Enable Flow" (green)
+      btn.textContent = "Enable Flow";
+      btn.classList.remove("off");
+      btn.classList.add("on");
     }
   });
 });
 
 
 /* ==========================================================
-   PASSIVE REFRESH (never changes selected class)
+   LOAD EVERYTHING (runs at start and every 5 seconds)
    ========================================================== */
-setInterval(loadDashboard, 5000);
 
-/* ==========================================================
-   LOAD EVERYTHING
-   ========================================================== */
+setInterval(loadDashboard, 5000);
 loadDashboard();
 
 async function loadDashboard() {
@@ -171,7 +110,7 @@ async function loadDashboard() {
 }
 
 /* ==========================================================
-   CLOCK
+   REFRESH CLOCK
    ========================================================== */
 function updateLastRefresh() {
   const now = new Date();
@@ -180,7 +119,29 @@ function updateLastRefresh() {
 }
 
 /* ==========================================================
-   RENDER CARDS
+   ALARM HANDLING
+   ========================================================== */
+async function loadClassAlarm(room) {
+  const res = await fetch(`/api/alarm?room=${room}`);
+  showAlarm(await res.json());
+}
+
+function showAlarm(alarm) {
+  const box = document.getElementById("class-alarm");
+  if (!box) return;
+
+  if (alarm.active) {
+    box.textContent = `🚨 ${alarm.message}`;
+    box.classList.remove("alarm-hidden");
+    box.classList.add("alarm-visible");
+  } else {
+    box.classList.add("alarm-hidden");
+    box.classList.remove("alarm-visible");
+  }
+}
+
+/* ==========================================================
+   RENDER CLASS CARDS
    ========================================================== */
 function renderCards(sensors) {
   const container = document.getElementById("cards");
@@ -204,6 +165,7 @@ function renderCards(sensors) {
 
 function createCard(s) {
   const card = document.createElement("div");
+
   card.classList.add("sensor-card", s.closed ? "closed" : "online");
   card.setAttribute("data-room", s.room);
 
@@ -221,11 +183,14 @@ function createCard(s) {
     <div class="temp-value">${s.closed ? "--" : s.temp.toFixed(1)}°C</div>
 
     <div class="details">
-      ${s.closed
-      ? "<p>No recent data</p>"
-      : `<p>${s.hum.toFixed(1)}% humidity</p>
-           <p>Feels like: ${s.feels.toFixed(1)}°C</p>`
-    }
+      ${
+        s.closed
+          ? "<p>No recent data</p>"
+          : `
+              <p>${s.hum.toFixed(1)}% humidity</p>
+              <p>Feels like: ${s.feels.toFixed(1)}°C</p>
+            `
+      }
     </div>
   `;
 
@@ -254,7 +219,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* ==========================================================
-   HIGHLIGHT SELECTED CLASS
+   HIGHLIGHT SELECTED CARD
    ========================================================== */
 function highlightSelectedCard(room) {
   const cards = document.querySelectorAll(".sensor-card");
@@ -268,7 +233,7 @@ function highlightSelectedCard(room) {
 }
 
 /* ==========================================================
-   HISTORY + CHART LOADING
+   HISTORY + CHARTS
    ========================================================== */
 async function loadHistory(className) {
   await loadClassAlarm(className);
@@ -290,7 +255,7 @@ async function loadHistory(className) {
 }
 
 /* ==========================================================
-   CHART HELPERS
+   CHART BUILDERS
    ========================================================== */
 function createGradient(ctx, c1, c2) {
   const g = ctx.createLinearGradient(0, 0, 0, 300);
@@ -309,9 +274,6 @@ function firstPoint(ctx, color) {
   };
 }
 
-/* ==========================================================
-   TEMP CHART
-   ========================================================== */
 function buildTempChart(labels, temps) {
   const ctx = document.getElementById("tempChart").getContext("2d");
   const color = "#3F88F8";
@@ -346,9 +308,6 @@ function buildTempChart(labels, temps) {
   }
 }
 
-/* ==========================================================
-   HUMIDITY CHART
-   ========================================================== */
 function buildHumChart(labels, hums) {
   const ctx = document.getElementById("humChart").getContext("2d");
   const color = "#B388FF";
@@ -383,9 +342,6 @@ function buildHumChart(labels, hums) {
   }
 }
 
-/* ==========================================================
-   CO₂ CHART
-   ========================================================== */
 function buildCo2Chart(labels, co2s) {
   const ctx = document.getElementById("co2Chart").getContext("2d");
   const color = "#66BB6A";
